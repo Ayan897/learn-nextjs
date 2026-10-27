@@ -1,8 +1,8 @@
-import bcrypt from 'bcrypt';
-import postgres from 'postgres';
-import { invoices, customers, revenue, users } from '../lib/placeholder-data';
+import bcrypt from "bcrypt";
+import postgres from "postgres";
+import { invoices, customers, revenue, users } from "../lib/placeholder-data";
 
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });
 
 async function seedUsers() {
   await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
@@ -101,6 +101,15 @@ async function seedRevenue() {
   return insertedRevenue;
 }
 
+async function resetTables() {
+  await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
+  // CASCADE automatically drops foreign key dependencies
+  await sql`DROP TABLE IF EXISTS invoices CASCADE`;
+  await sql`DROP TABLE IF EXISTS customers CASCADE`;
+  await sql`DROP TABLE IF EXISTS users CASCADE`;
+  await sql`DROP TABLE IF EXISTS revenue CASCADE`;
+}
+
 export async function GET() {
   try {
     const result = await sql.begin((sql) => [
@@ -110,8 +119,12 @@ export async function GET() {
       seedRevenue(),
     ]);
 
-    return Response.json({ message: 'Database seeded successfully' });
+    // End/close the connection so it does not stay open on Aiven
+    await sql.end();
+
+    return Response.json({ message: "Database seeded successfully" });
   } catch (error) {
+    await sql.end();
     return Response.json({ error }, { status: 500 });
   }
 }
